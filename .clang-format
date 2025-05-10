@@ -1,0 +1,11 @@
+# .clang-format
+BasedOnStyle: LLVM
+IndentWidth: 8 # Set indentation to 8 spaces
+UseTab: Never # Use spaces, not tabs
+TabWidth: 8 # If tabs are used (e.g. by accident), treat them as 8 spaces
+AllowShortIfStatementsOnASingleLine: false
+BreakBeforeBraces: Allman # Put opening braces on a new line
+ColumnLimit: 100 # Wrap lines after 100 characters
+AlignConsecutiveAssignments: true
+AlignOperands: true
+SortIncludes: true
