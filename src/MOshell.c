@@ -3,30 +3,110 @@
 #include <string.h>
 #include <sys/wait.h>
 #include <unistd.h>
+
 #define buffer_size 1024
-#define token_size 65
-#define token_delimiter "\t\r\n\a"
+#define token_size 64
+#define token_delimiter " \t\r\n\a"
 
 int shell_cd(char **args);
 int shell_help(char **args);
 int shell_exit(char **args);
 int shell_launch(char **args);
-char *buildin_str[] = {"cd", "help", "exit"};
 
-int num_buildins() { return sizeof(buildin_str) / sizeof(char *); }
+// Built-in commands
+char *builtin_str[] = {"cd", "help", "exit"};
+
+int (*builtin_func[])(char **) = {&shell_cd, &shell_help, &shell_exit};
+
+int num_builtins() { return sizeof(builtin_str) / sizeof(char *); }
+
+char *shorten_part(char *path)
+{
+        static char shortened[1024];
+        char *user = getenv("USER");
+        if (!user)
+                user = "user"; // Fallback if USER is not set
+
+        char home_prefix[256];
+        snprintf(home_prefix, sizeof(home_prefix), "/home/%s", user);
+        size_t home_len = strlen(home_prefix);
+
+        // Handle replacement of /home/USER with ~
+        const char *relative_path = path;
+        if (strncmp(path, home_prefix, home_len) == 0)
+        {
+                relative_path = path + home_len;
+        }
+
+        // If the remaining path is short, return with ~ if applicable
+        if (strlen(path) <= 30)
+        {
+                if (relative_path != path)
+                {
+                        snprintf(shortened, sizeof(shortened), "~%s", relative_path);
+                }
+                else
+                {
+                        snprintf(shortened, sizeof(shortened), "%s", path);
+                }
+                return shortened;
+        }
+
+        // Begin abbreviation
+        char temp[1024];
+        snprintf(temp, sizeof(temp), "%s", relative_path);
+
+        char *token;
+        char *last = NULL;
+        char *components[64];
+        int count = 0;
+
+        token = strtok(temp, "/");
+        while (token != NULL)
+        {
+                components[count++] = token;
+                token               = strtok(NULL, "/");
+        }
+
+        shortened[0] = '\0';
+        if (relative_path != path)
+                strcat(shortened, "~");
+        else
+                strcat(shortened, "");
+
+        for (int i = 0; i < count; i++)
+        {
+                strcat(shortened, "/");
+                if (i == count - 1)
+                {
+                        strcat(shortened, components[i]); // last full
+                }
+                else
+                {
+                        strncat(shortened, components[i], 1); // just first char
+                }
+        }
+
+        return shortened;
+}
+
 char *read_command(void)
 {
-        int bufsize = buffer_size;
-        int c, position = 0;
+        int bufsize  = buffer_size;
+        int position = 0;
+        int c;
         char *buffer = malloc(sizeof(char) * bufsize);
+
         if (!buffer)
         {
-                fprintf(stderr, "Failed to allocate memory");
+                fprintf(stderr, "Failed to allocate memory\n");
                 exit(EXIT_FAILURE);
         }
+
         while (1)
         {
                 c = getchar();
+
                 if (c == EOF || c == '\n')
                 {
                         buffer[position] = '\0';
@@ -38,13 +118,14 @@ char *read_command(void)
                 }
 
                 position++;
+
                 if (position >= bufsize)
                 {
                         bufsize += buffer_size;
                         buffer = realloc(buffer, bufsize);
                         if (!buffer)
                         {
-                                fprintf(stderr, "Failed to reallocate memory");
+                                fprintf(stderr, "Failed to reallocate memory\n");
                                 exit(EXIT_FAILURE);
                         }
                 }
@@ -56,45 +137,48 @@ char **split_line(char *line)
         int bufsize = token_size, position = 0;
         char **tokens = malloc(sizeof(char *) * bufsize);
         char *token;
+
         if (!tokens)
         {
-                fprintf(stderr, "Failed to allocate memory");
+                fprintf(stderr, "Failed to allocate memory\n");
                 exit(EXIT_FAILURE);
         }
-        token = strtok(line, token_delimiter); // should return entire string ?
+
+        token = strtok(line, token_delimiter);
         while (token != NULL)
         {
-                tokens[position] = token;
-                position++;
+                tokens[position++] = token;
+
                 if (position >= bufsize)
                 {
                         bufsize += token_size;
-                        tokens = realloc(tokens, bufsize);
+                        tokens = realloc(tokens, bufsize * sizeof(char *));
                         if (!tokens)
                         {
-                                fprintf(stderr, "Failed to reallocated memory");
+                                fprintf(stderr, "Failed to reallocate memory\n");
                                 exit(EXIT_FAILURE);
                         }
                 }
-                token = strtok(NULL, token_delimiter); // Why? Does this just return NULL?
+
+                token = strtok(NULL, token_delimiter);
         }
         tokens[position] = NULL;
+
         return tokens;
 }
 
-int (*buildin_fun[])(char **) = {&shell_cd, &shell_help, &shell_exit};
-int execute_commad(char **args)
+int execute_command(char **args)
 {
-        int i;
         if (args[0] == NULL)
         {
                 return 1;
         }
-        for (i = 0; i < num_buildins(); i++)
+
+        for (int i = 0; i < num_builtins(); i++)
         {
-                if (strcmp(args[0], buildin_str[i]) == 0)
+                if (strcmp(args[0], builtin_str[i]) == 0)
                 {
-                        return (*buildin_fun[i])(args);
+                        return (*builtin_func[i])(args);
                 }
         }
 
@@ -105,21 +189,25 @@ int shell_launch(char **args)
 {
         pid_t pid, wpid;
         int status;
+
         pid = fork();
-        if (pid == 0) // child process running and healthy
+        if (pid == 0)
         {
+                // Child process
                 if (execvp(args[0], args) == -1)
                 {
-                        perror("Error with shell");
+                        perror("Error executing command");
                 }
                 exit(EXIT_FAILURE);
         }
         else if (pid < 0)
         {
-                perror("Error with shell");
+                // Error forking
+                perror("Forking error");
         }
         else
         {
+                // Parent process
                 do
                 {
                         wpid = waitpid(pid, &status, WUNTRACED);
@@ -128,18 +216,41 @@ int shell_launch(char **args)
 
         return 1;
 }
-// cd ,help and exit functions
+
 int shell_cd(char **args)
 {
         if (args[1] == NULL)
         {
-                fprintf(stderr, "Specify a direcotry");
+                fprintf(stderr, "Expected argument to \"cd\"\n");
         }
         else
         {
-                if (chdir(args[1]) != 0)
+                char *path = args[1];
+
+                if (path[0] == '~')
                 {
-                        perror("Error changing directory");
+                        char *user = getenv("USER");
+                        if (!user)
+                        {
+                                fprintf(stderr, "USER environment variable not set\n");
+                                return 1;
+                        }
+
+                        char expanded_path[1024];
+                        snprintf(expanded_path, sizeof(expanded_path), "/home/%s%s", user,
+                                 path + 1);
+
+                        if (chdir(expanded_path) != 0)
+                        {
+                                perror("Error changing directory");
+                        }
+                }
+                else
+                {
+                        if (chdir(path) != 0)
+                        {
+                                perror("Error changing directory");
+                        }
                 }
         }
         return 1;
@@ -147,14 +258,16 @@ int shell_cd(char **args)
 
 int shell_help(char **args)
 {
-        int i;
-        printf("MOShell , run  like a normal shell\n");
-        printf("The following are build in \n");
-        for (i = 0; i < num_buildins(); i++)
+        printf("MOShell: A basic shell implementation\n");
+        printf("Built-in commands:\n");
+
+        for (int i = 0; i < num_builtins(); i++)
         {
-                printf("%s \n", buildin_str[i]);
+                printf("  %s\n", builtin_str[i]);
         }
-        return 1; // status value
+
+        printf("Use the man command for info on other programs.\n");
+        return 1;
 }
 
 int shell_exit(char **args) { return 0; }
@@ -162,16 +275,30 @@ int shell_exit(char **args) { return 0; }
 void shell_loop(void)
 {
         int status;
-        char *line, **args;
+        char *line;
+        char **args;
+        char cwd[1024];
+        char *current_path;
+
         do
         {
-                printf(">");
+                if (getcwd(cwd, sizeof(cwd)) != NULL)
+                {
+                        current_path = shorten_part(cwd);
+                        printf("%s~> ", current_path);
+                }
+                else
+                {
+                        perror("getcwd error");
+                        exit(EXIT_FAILURE);
+                }
+
                 line   = read_command();
                 args   = split_line(line);
-                status = execute_commad(args);
+                status = execute_command(args);
+
                 free(line);
                 free(args);
-
         } while (status);
 }
 
