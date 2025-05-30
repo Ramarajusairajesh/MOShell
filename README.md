@@ -2,6 +2,7 @@
 As part of my journey to learn more about programming and Linux, this is one of the projects I created in C! It’s a simple shell written purely in C.
 How to Run This Project:
 
+
 ```
 git clone https://github.com/Ramarajusairajesh/MOShell/
 cd MOShell/src
@@ -29,3 +30,10 @@ make
 ./moshell
 ```
 but just use gcc directly for this to be simple !
+
+Features:
+[*] Build in command(cd,pwd,history)
+[*] Signal handeling
+[*]Command Parsing with pipes  and redirections
+[*] Tab completion
+[+] Background process management
