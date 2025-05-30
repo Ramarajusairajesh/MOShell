@@ -18,9 +18,13 @@
 int shell_cd(char **args);
 int shell_help(char **args);
 int shell_pwd(char **args);
-int shell_exit(char **args);
 int shell_launch(char **args);
 
+int shell_exit(char **args)
+{
+        printf("Exiting MOshell.\n");
+        return 0;
+}
 struct termios orig_termios;
 
 // CTRL+C handler
@@ -444,11 +448,6 @@ int shell_pwd(char **args)
         }
 
         return 1;
-}
-int shell_exit(char **args)
-{
-        printf("Exited shell.\n");
-        return 0;
 }
 
 int shell_launch(char **args)
