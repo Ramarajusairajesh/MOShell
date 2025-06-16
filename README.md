@@ -34,6 +34,7 @@ but just use gcc directly for this to be simple !
 Features:
 
 [*] Build in command(cd,pwd,history)
+
 [*] Signal handeling
 
 [*]Command Parsing with pipes  and redirections
